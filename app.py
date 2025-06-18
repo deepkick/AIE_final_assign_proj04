@@ -3,8 +3,10 @@ import pandas as pd
 import openai
 import os
 
-st.set_page_config(page_title="講義の質疑応答まとめアプリ", layout="centered")
-st.title("📚 質疑応答の要約アプリ")
+st.set_page_config(
+    page_title="講義の質疑応答まとめアプリ : AIE Proj 04", layout="centered"
+)
+st.title("📚 講義の質疑応答まとめアプリ : AIE Proj 04")
 
 # Streamlit Cloud Secrets から OpenAI APIキーを取得
 openai_api_key = st.secrets["openai_api_key"]
