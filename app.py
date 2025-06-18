@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import openai
 import os
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import normalize
+import numpy as np
 
 st.set_page_config(
     page_title="講義の質疑応答まとめアプリ : AIE Proj 04", layout="centered"
@@ -13,6 +16,11 @@ openai_api_key = st.secrets["openai_api_key"]
 
 # OpenAI クライアントのセットアップ（openai>=1.0.0対応）
 client = openai.OpenAI(api_key=openai_api_key)
+
+# クラスタ数の指定
+num_clusters = st.sidebar.slider(
+    "クラスタ数（KMeans）", min_value=2, max_value=10, value=3
+)
 
 # ファイルアップロード
 uploaded_file = st.file_uploader(
@@ -26,83 +34,92 @@ if uploaded_file:
         st.error("'質問' という列が必要です。CSVを確認してください。")
     else:
         st.success(f"✅ {len(df)} 件の質問を読み込みました。")
+        questions = df["質問"].dropna().tolist()
 
-        if st.button("▶️ GPTで代表質問を要約する"):
-            prompt = """
+        # ベクトル化（OpenAI埋め込み）
+        with st.spinner("💠 OpenAI埋め込みを取得中..."):
+            try:
+                embeddings_response = client.embeddings.create(
+                    model="text-embedding-ada-002", input=questions
+                )
+                vectors = np.array([e.embedding for e in embeddings_response.data])
+            except Exception as e:
+                st.error(f"埋め込み取得に失敗しました: {e}")
+                st.stop()
+
+        # KMeansクラスタリング
+        vectors_norm = normalize(vectors)
+        kmeans = KMeans(n_clusters=num_clusters, random_state=42)
+        labels = kmeans.fit_predict(vectors_norm)
+        df["クラスタ"] = labels
+
+        st.success(
+            f"✅ {num_clusters} クラスタに分類しました。各クラスタごとに要約と回答を生成できます。"
+        )
+
+        # クラスタごとに要約と回答生成
+        for cluster_id in range(num_clusters):
+            cluster_df = df[df["クラスタ"] == cluster_id]
+            cluster_questions = cluster_df["質問"].tolist()
+
+            with st.expander(
+                f"▶️ クラスタ {cluster_id}：{len(cluster_questions)} 件の質問"
+            ):
+                st.markdown("\n".join([f"- {q}" for q in cluster_questions]))
+
+                if st.button(f"🧠 クラスタ {cluster_id} の代表質問を生成"):
+                    prompt = """
 以下の質問は講義中に受けた似た内容の質問です。これらを要約して、代表的な1つの質問にまとめてください。
 質問一覧：
 """
-            questions = df["質問"].dropna().tolist()
-            prompt += "\n".join(
-                [f"- {q}" for q in questions[:20]]
-            )  # 最初の20件でテスト
-            prompt += "\n\n代表質問："
+                    prompt += "\n".join([f"- {q}" for q in cluster_questions])
+                    prompt += "\n\n代表質問："
 
-            with st.spinner("GPTが要約中..."):
-                try:
-                    response = client.chat.completions.create(
-                        model="gpt-4",
-                        messages=[
-                            {
-                                "role": "system",
-                                "content": "あなたは親切で要約が上手なアシスタントです。",
-                            },
-                            {"role": "user", "content": prompt},
-                        ],
-                        temperature=0.5,
-                    )
-                    summary_question = response.choices[0].message.content.strip()
-                    st.session_state["summary_question"] = summary_question
+                    with st.spinner("GPTが代表質問を要約中..."):
+                        try:
+                            response = client.chat.completions.create(
+                                model="gpt-4",
+                                messages=[
+                                    {
+                                        "role": "system",
+                                        "content": "あなたは親切で要約が上手なアシスタントです。",
+                                    },
+                                    {"role": "user", "content": prompt},
+                                ],
+                                temperature=0.5,
+                            )
+                            summary_question = response.choices[
+                                0
+                            ].message.content.strip()
+                            st.markdown(f"**💬 代表質問：** {summary_question}")
 
-                    usage = response.usage
-                    if usage:
-                        st.session_state["summary_usage"] = usage.total_tokens
-
-                    st.rerun()  # 状態を保存した上でページを再実行し、表示を安定させる
-
-                except Exception as e:
-                    st.error(f"エラーが発生しました: {e}")
-
-# 💬 代表質問の表示（セッション状態から）
-if "summary_question" in st.session_state:
-    st.subheader("💬 代表質問（要約）")
-    st.markdown(st.session_state["summary_question"])
-    if "summary_usage" in st.session_state:
-        st.info(f"🔢 トークン消費量: {st.session_state['summary_usage']} tokens")
-
-    # 💡 模範回答の自動生成（常に表示、状態依存）
-    if st.button("💡 この質問に対する模範回答を生成"):
-        answer_prompt = f"以下の質問に対して、講義で使える模範的な回答を生成してください。\n\n質問：{st.session_state['summary_question']}\n\n回答："
-        with st.spinner("GPTが模範回答を生成中..."):
-            try:
-                answer_response = client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "あなたは親切でわかりやすく説明できる講義アシスタントです。",
-                        },
-                        {"role": "user", "content": answer_prompt},
-                    ],
-                    temperature=0.7,
-                )
-                model_answer = answer_response.choices[0].message.content.strip()
-                st.session_state["model_answer"] = model_answer
-
-                answer_usage = answer_response.usage
-                if answer_usage:
-                    st.session_state["answer_usage"] = answer_usage.total_tokens
-
-                st.rerun()  # 状態を保存した上でページを再実行し、回答表示も安定
-
-            except Exception as e:
-                st.error(f"模範回答生成中にエラーが発生しました: {e}")
-
-# 📝 模範回答の表示
-if "model_answer" in st.session_state:
-    st.subheader("📝 模範回答（GPT生成）")
-    st.markdown(st.session_state["model_answer"])
-    if "answer_usage" in st.session_state:
-        st.info(
-            f"🔢 トークン消費量（回答生成）: {st.session_state['answer_usage']} tokens"
-        )
+                            if st.button(f"💡 クラスタ {cluster_id} の模範回答を生成"):
+                                answer_prompt = f"以下の質問に対して、講義で使える模範的な回答を生成してください。\n\n質問：{summary_question}\n\n回答："
+                                with st.spinner("GPTが模範回答を生成中..."):
+                                    try:
+                                        answer_response = client.chat.completions.create(
+                                            model="gpt-4",
+                                            messages=[
+                                                {
+                                                    "role": "system",
+                                                    "content": "あなたは親切でわかりやすく説明できる講義アシスタントです。",
+                                                },
+                                                {
+                                                    "role": "user",
+                                                    "content": answer_prompt,
+                                                },
+                                            ],
+                                            temperature=0.7,
+                                        )
+                                        model_answer = answer_response.choices[
+                                            0
+                                        ].message.content.strip()
+                                        st.markdown(
+                                            f"**📝 模範回答：**\n\n{model_answer}"
+                                        )
+                                    except Exception as e:
+                                        st.error(
+                                            f"模範回答生成中にエラーが発生しました: {e}"
+                                        )
+                        except Exception as e:
+                            st.error(f"代表質問生成中にエラーが発生しました: {e}")
