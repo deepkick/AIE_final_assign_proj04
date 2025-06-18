@@ -3,7 +3,7 @@ import pandas as pd
 import openai
 import os
 
-st.set_page_config(page_title="Q&Aまとめアプリ", layout="centered")
+st.set_page_config(page_title="講義の質疑応答まとめアプリ", layout="centered")
 st.title("📚 質疑応答の要約アプリ")
 
 # Streamlit Cloud Secrets から OpenAI APIキーを取得
@@ -58,6 +58,37 @@ if uploaded_file:
                     if usage:
                         total_tokens = usage.total_tokens
                         st.info(f"🔢 トークン消費量: {total_tokens} tokens")
+
+                    # 💡 模範回答の自動生成
+                    if st.button("💡 この質問に対する模範回答を生成"):
+                        answer_prompt = f"以下の質問に対して、講義で使える模範的な回答を生成してください。\n\n質問：{summary_question}\n\n回答："
+                        with st.spinner("GPTが模範回答を生成中..."):
+                            try:
+                                answer_response = client.chat.completions.create(
+                                    model="gpt-4",
+                                    messages=[
+                                        {
+                                            "role": "system",
+                                            "content": "あなたは親切でわかりやすく説明できる講義アシスタントです。",
+                                        },
+                                        {"role": "user", "content": answer_prompt},
+                                    ],
+                                    temperature=0.7,
+                                )
+                                model_answer = answer_response.choices[
+                                    0
+                                ].message.content.strip()
+                                st.subheader("📝 模範回答（GPT生成）")
+                                st.markdown(model_answer)
+
+                                answer_usage = answer_response.usage
+                                if answer_usage:
+                                    st.info(
+                                        f"🔢 トークン消費量（回答生成）: {answer_usage.total_tokens} tokens"
+                                    )
+
+                            except Exception as e:
+                                st.error(f"模範回答生成中にエラーが発生しました: {e}")
 
                 except Exception as e:
                     st.error(f"エラーが発生しました: {e}")
