@@ -18,9 +18,7 @@ openai_api_key = st.secrets["openai_api_key"]
 client = openai.OpenAI(api_key=openai_api_key)
 
 # クラスタ数の指定
-num_clusters = st.sidebar.slider(
-    "クラスタ数（KMeans）", min_value=2, max_value=10, value=3
-)
+num_clusters = st.slider("クラスタ数（KMeans）", min_value=2, max_value=10, value=3)
 
 # ファイルアップロード
 uploaded_file = st.file_uploader(
