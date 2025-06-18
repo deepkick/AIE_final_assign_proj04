@@ -54,20 +54,23 @@ if uploaded_file:
                     summary_question = response.choices[0].message.content.strip()
                     st.session_state["summary_question"] = summary_question
 
-                    st.subheader("💬 代表質問（要約）")
-                    st.markdown(summary_question)
-
-                    # 🔢 トークン使用量の表示
                     usage = response.usage
                     if usage:
-                        total_tokens = usage.total_tokens
-                        st.info(f"🔢 トークン消費量: {total_tokens} tokens")
+                        st.session_state["summary_usage"] = usage.total_tokens
 
                 except Exception as e:
                     st.error(f"エラーが発生しました: {e}")
 
-        # 💡 模範回答の自動生成（常に表示、状態依存）
+        # 💬 代表質問の表示（セッション状態から）
         if "summary_question" in st.session_state:
+            st.subheader("💬 代表質問（要約）")
+            st.markdown(st.session_state["summary_question"])
+            if "summary_usage" in st.session_state:
+                st.info(
+                    f"🔢 トークン消費量: {st.session_state['summary_usage']} tokens"
+                )
+
+            # 💡 模範回答の自動生成（常に表示、状態依存）
             if st.button("💡 この質問に対する模範回答を生成"):
                 answer_prompt = f"以下の質問に対して、講義で使える模範的な回答を生成してください。\n\n質問：{st.session_state['summary_question']}\n\n回答："
                 with st.spinner("GPTが模範回答を生成中..."):
@@ -86,14 +89,20 @@ if uploaded_file:
                         model_answer = answer_response.choices[
                             0
                         ].message.content.strip()
-                        st.subheader("📝 模範回答（GPT生成）")
-                        st.markdown(model_answer)
+                        st.session_state["model_answer"] = model_answer
 
                         answer_usage = answer_response.usage
                         if answer_usage:
-                            st.info(
-                                f"🔢 トークン消費量（回答生成）: {answer_usage.total_tokens} tokens"
-                            )
+                            st.session_state["answer_usage"] = answer_usage.total_tokens
 
                     except Exception as e:
                         st.error(f"模範回答生成中にエラーが発生しました: {e}")
+
+        # 📝 模範回答の表示
+        if "model_answer" in st.session_state:
+            st.subheader("📝 模範回答（GPT生成）")
+            st.markdown(st.session_state["model_answer"])
+            if "answer_usage" in st.session_state:
+                st.info(
+                    f"🔢 トークン消費量（回答生成）: {st.session_state['answer_usage']} tokens"
+                )
