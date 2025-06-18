@@ -52,5 +52,12 @@ if uploaded_file:
                     summary_question = response.choices[0].message.content.strip()
                     st.subheader("💬 代表質問（要約）")
                     st.markdown(summary_question)
+
+                    # 🔢 トークン使用量の表示
+                    usage = response.usage
+                    if usage:
+                        total_tokens = usage.total_tokens
+                        st.info(f"🔢 トークン消費量: {total_tokens} tokens")
+
                 except Exception as e:
                     st.error(f"エラーが発生しました: {e}")
