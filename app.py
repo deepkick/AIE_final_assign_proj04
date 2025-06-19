@@ -135,7 +135,6 @@ if uploaded_file:
                                 0
                             ].message.content.strip()
                             st.session_state[answer_key] = model_answer
-                            st.experimental_rerun()
 
                         except Exception as e:
                             st.error(f"模範回答生成中にエラーが発生しました: {e}")
