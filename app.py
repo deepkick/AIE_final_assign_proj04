@@ -15,12 +15,16 @@ st.set_page_config(
 st.title("📚 講義の質疑応答まとめアプリ : AIE Proj 04")
 
 client = OpenAI(api_key=st.secrets["openai_api_key"])
-CHAT_MODEL = "gpt-4"
 
 # ─────────────────────────────
-# UI：クラスタ数 & CSV
+# UI：クラスタ数 & モデル選択 & CSV
 # ─────────────────────────────
 num_clusters = st.slider("クラスタ数（KMeans）", 2, 20, 10)
+
+model_options = ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4"]
+summary_model = st.selectbox("代表質問生成モデル", model_options, index=1)
+answer_model = st.selectbox("模範回答生成モデル", model_options, index=2)
+
 uploaded_file = st.file_uploader(
     "📤 CSVファイルをアップロード（列: 質問, 回答）", type=["csv"]
 )
@@ -66,16 +70,16 @@ if uploaded_file:
             # 2. 代表質問生成ボタン
             gen_sum = st.button("🧠 代表質問を生成", key=f"btn_sum_{cid}")
 
-            # 3. 代表質問表示プレースホルダー（位置固定）
+            # 3. 代表質問プレースホルダー
             sum_ph = st.container()
 
             # 4. 模範回答生成ボタン
             gen_ans = st.button("💡 模範回答を生成", key=f"btn_ans_{cid}")
 
-            # 5. 模範回答表示プレースホルダー（位置固定）
+            # 5. 模範回答プレースホルダー
             ans_ph = st.container()
 
-            # ── ボタン処理（代表質問） ──────────────────
+            # ── 代表質問生成処理 ───────────────────
             if gen_sum:
                 prompt = (
                     textwrap.dedent(
@@ -90,9 +94,9 @@ if uploaded_file:
                     + "\n\n代表質問："
                 )
 
-                with st.spinner("GPT が代表質問を要約中..."):
+                with st.spinner(f"{summary_model} で代表質問生成中..."):
                     res = client.chat.completions.create(
-                        model=CHAT_MODEL,
+                        model=summary_model,
                         messages=[
                             {
                                 "role": "system",
@@ -106,7 +110,7 @@ if uploaded_file:
                 st.session_state.pop(ans_key, None)  # 回答は無効化
                 st.toast("✅ 代表質問を生成しました")
 
-            # ── ボタン処理（模範回答） ──────────────────
+            # ── 模範回答生成処理 ───────────────────
             if gen_ans:
                 if not st.session_state.get(sum_key):
                     st.warning("⚠️ 先に代表質問を生成してください。")
@@ -120,9 +124,9 @@ if uploaded_file:
                         回答：
                         """
                     )
-                    with st.spinner("GPT が模範回答を生成中..."):
+                    with st.spinner(f"{answer_model} で模範回答生成中..."):
                         ares = client.chat.completions.create(
-                            model=CHAT_MODEL,
+                            model=answer_model,
                             messages=[
                                 {
                                     "role": "system",
@@ -135,7 +139,7 @@ if uploaded_file:
                     st.session_state[ans_key] = ares.choices[0].message.content.strip()
                     st.toast("✅ 模範回答を生成しました")
 
-            # ── プレースホルダー描画（毎回） ──────────────────
+            # ── プレースホルダー描画 ─────────────────
             if st.session_state.get(sum_key):
                 sum_ph.markdown(f"**💬 代表質問：**\n\n{st.session_state[sum_key]}")
             else:
@@ -145,3 +149,22 @@ if uploaded_file:
                 ans_ph.markdown(f"**📝 模範回答：**\n\n{st.session_state[ans_key]}")
             else:
                 ans_ph.empty()
+
+            # 6. Markdown ダウンロードボタン（常に固定）
+            md_content = ""
+            if st.session_state.get(sum_key):
+                md_content += (
+                    f"### クラスタ {cid} 代表質問\n\n{st.session_state[sum_key]}\n\n"
+                )
+            if st.session_state.get(ans_key):
+                md_content += (
+                    f"### クラスタ {cid} 模範回答\n\n{st.session_state[ans_key]}\n"
+                )
+
+            st.download_button(
+                "📄 Markdown ダウンロード",
+                data=md_content if md_content else "生成物がありません。",
+                file_name=f"cluster{cid}_qa.md",
+                mime="text/markdown",
+                key=f"dl_{cid}",
+            )
