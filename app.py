@@ -6,28 +6,33 @@ from sklearn.preprocessing import normalize
 import numpy as np
 import textwrap
 
-# ───── Streamlit 基本設定 ─────
+# ─────────────────────────────
+# 基本設定 & OpenAI
+# ─────────────────────────────
 st.set_page_config(
-    page_title="講義の質疑応答まとめアプリ : AIE Proj 04", layout="centered"
+    page_title="講義の質疑応答まとめアプリ : AIE Proj 04",
+    layout="centered",
 )
 st.title("📚 講義の質疑応答まとめアプリ : AIE Proj 04")
 
 client = OpenAI(api_key=st.secrets["openai_api_key"])
 
-# ───── サイドバー：設定項目 ─────
-with st.sidebar:
-    st.header("⚙️ 設定")
-    num_clusters = st.slider("クラスタ数（KMeans）", 2, 20, 10)
-    model_options = ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4"]
-    summary_model = st.selectbox("代表質問生成モデル", model_options, index=1)
-    answer_model = st.selectbox("模範回答生成モデル", model_options, index=2)
+# ─────────────────────────────
+# UI：クラスタ数・モデル選択・CSV
+# ─────────────────────────────
+num_clusters = st.slider("クラスタ数（KMeans）", 2, 20, 10)
 
-# ───── CSV アップロード（メインカラム）─────
+model_options = ["gpt-3.5-turbo", "gpt-4o-mini", "gpt-4"]
+summary_model = st.selectbox("代表質問生成モデル", model_options, index=1)
+answer_model = st.selectbox("模範回答生成モデル", model_options, index=2)
+
 uploaded_file = st.file_uploader(
     "📤 CSVファイルをアップロード（列: 質問, 回答）", type=["csv"]
 )
 
-# ───── メイン処理 ─────
+# ─────────────────────────────
+# メイン処理
+# ─────────────────────────────
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
@@ -51,11 +56,12 @@ if uploaded_file:
     df["クラスタ"] = labels
     st.success(f"✅ {num_clusters} クラスタに分類しました。")
 
-    # ── 各クラスタ UI ──
+    # ────────── 各クラスタ UI ──────────
     for cid in range(num_clusters):
         cdf = df[df["クラスタ"] == cid]
         questions = cdf["質問"].tolist()
 
+        # セッションキー
         sum_key, ans_key = f"sum_{cid}", f"ans_{cid}"
 
         with st.expander(f"▶️ クラスタ {cid}：{len(questions)} 件の質問", expanded=True):
@@ -63,26 +69,33 @@ if uploaded_file:
             # 1. 質問リスト
             st.markdown("\n".join([f"- {q}" for q in questions]))
 
-            # 2. ボタン & プレースホルダー
+            # 2. 代表質問生成ボタン
             gen_sum = st.button("🧠 代表質問を生成", key=f"btn_sum_{cid}")
+
+            # 3. 代表質問プレースホルダー
             sum_ph = st.container()
+
+            # 4. 模範回答生成ボタン
             gen_ans = st.button("💡 模範回答を生成", key=f"btn_ans_{cid}")
+
+            # 5. 模範回答プレースホルダー
             ans_ph = st.container()
 
-            # 代表質問生成
+            # ── 代表質問生成 ─────────────────────────
             if gen_sum:
                 prompt = (
                     textwrap.dedent(
                         """\
-                    以下の質問は講義中に受けた似た内容の質問です。
-                    1 つに要約してください。
+                        以下の質問は講義中に受けた似た内容の質問です。
+                        1 つに要約してください。
 
-                    質問一覧:
+                        質問一覧:
                     """
                     )
                     + "\n".join([f"- {q}" for q in questions])
                     + "\n\n代表質問："
                 )
+
                 with st.spinner(f"{summary_model} で代表質問生成中..."):
                     res = client.chat.completions.create(
                         model=summary_model,
@@ -96,10 +109,10 @@ if uploaded_file:
                         temperature=0.5,
                     )
                 st.session_state[sum_key] = res.choices[0].message.content.strip()
-                st.session_state.pop(ans_key, None)
+                st.session_state.pop(ans_key, None)  # 回答は無効化
                 st.toast("✅ 代表質問を生成しました")
 
-            # 模範回答生成
+            # ── 模範回答生成 ─────────────────────────
             if gen_ans:
                 if not st.session_state.get(sum_key):
                     st.warning("⚠️ 先に代表質問を生成してください。")
@@ -111,7 +124,7 @@ if uploaded_file:
                         質問：{st.session_state[sum_key]}
 
                         回答：
-                        """
+                    """
                     )
                     with st.spinner(f"{answer_model} で模範回答生成中..."):
                         ares = client.chat.completions.create(
@@ -128,29 +141,24 @@ if uploaded_file:
                     st.session_state[ans_key] = ares.choices[0].message.content.strip()
                     st.toast("✅ 模範回答を生成しました")
 
-            # プレースホルダー描画
-            (
-                sum_ph.markdown(
-                    f"**💬 代表質問：**\n\n{st.session_state.get(sum_key,'')}"
-                )
-                if st.session_state.get(sum_key)
-                else sum_ph.empty()
-            )
+            # ── プレースホルダー描画 ─────────────────
+            if st.session_state.get(sum_key):
+                sum_ph.markdown(f"**💬 代表質問：**\n\n{st.session_state[sum_key]}")
+            else:
+                sum_ph.empty()
 
-            (
-                ans_ph.markdown(
-                    f"**📝 模範回答：**\n\n{st.session_state.get(ans_key,'')}"
-                )
-                if st.session_state.get(ans_key)
-                else ans_ph.empty()
-            )
+            if st.session_state.get(ans_key):
+                ans_ph.markdown(f"**📝 模範回答：**\n\n{st.session_state[ans_key]}")
+            else:
+                ans_ph.empty()
 
-            # Markdown DL
+            # 6. Markdown ダウンロードボタン
             md = ""
             if st.session_state.get(sum_key):
                 md += f"### クラスタ {cid} 代表質問\n\n{st.session_state[sum_key]}\n\n"
             if st.session_state.get(ans_key):
                 md += f"### クラスタ {cid} 模範回答\n\n{st.session_state[ans_key]}\n"
+
             st.download_button(
                 "📄 Markdown ダウンロード",
                 data=md or "生成物がありません。",
