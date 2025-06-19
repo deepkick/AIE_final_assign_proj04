@@ -4,6 +4,7 @@ from openai import OpenAI
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import normalize
 import numpy as np
+import textwrap
 
 # ──────────────────────────────────────────────
 # Streamlit 基本設定
@@ -19,6 +20,8 @@ st.title("📚 講義の質疑応答まとめアプリ : AIE Proj 04")
 # ──────────────────────────────────────────────
 openai_api_key = st.secrets["openai_api_key"]
 client = OpenAI(api_key=openai_api_key)
+
+CHAT_MODEL = "gpt-4"  # ← 固定で使用
 
 # ──────────────────────────────────────────────
 # UI：クラスタ数・ファイルアップロード
@@ -52,7 +55,7 @@ if uploaded_file:
             )
             vectors = np.array([e.embedding for e in embeddings_response.data])
         except Exception as e:
-            st.error(f"埋め込み取得に失敗しました: {e}")
+            st.error(f"埋め込み取得に失敗しました:\n\n{e}")
             st.stop()
 
     # -- KMeans クラスタリング ---------------------------------------------
@@ -76,15 +79,15 @@ if uploaded_file:
             summary_key = f"summary_question_{cluster_id}"
             answer_key = f"model_answer_{cluster_id}"
 
-            # ── 既存の代表質問・模範回答を表示 ─────────────────────────────
-            if summary_key in st.session_state and st.session_state[summary_key]:
+            # ── 既存の代表質問・模範回答を表示 ───────────────────
+            if st.session_state.get(summary_key):
                 st.markdown(
                     f"""**💬 代表質問：**
 
 {st.session_state[summary_key]}"""
                 )
 
-            if answer_key in st.session_state and st.session_state[answer_key]:
+            if st.session_state.get(answer_key):
                 st.markdown(
                     f"""**📝 模範回答：**
 
@@ -94,15 +97,18 @@ if uploaded_file:
             # 質問リストを列挙
             st.markdown("\n".join([f"- {q}" for q in cluster_questions]))
 
-            # ── GPT で代表質問生成 ──────────────────────────────────────
+            # ── GPT で代表質問生成 ────────────────────────────────
             if st.button(
                 f"🧠 クラスタ {cluster_id} の代表質問を生成",
                 key=f"summary_button_{cluster_id}",
             ):
-                prompt = (
-                    "以下の質問は講義中に受けた似た内容の質問です。"
-                    "これらを要約して、代表的な1つの質問にまとめてください。\n"
-                    "質問一覧：\n"
+                prompt = textwrap.dedent(
+                    """\
+                    以下の質問は講義中に受けた似た内容の質問です。
+                    これらを要約して、代表的な1つの質問にまとめてください。
+
+                    質問一覧：
+                    """
                 )
                 prompt += "\n".join([f"- {q}" for q in cluster_questions])
                 prompt += "\n\n代表質問："
@@ -110,7 +116,7 @@ if uploaded_file:
                 with st.spinner("GPT が代表質問を要約中..."):
                     try:
                         response = client.chat.completions.create(
-                            model="gpt-4",
+                            model=CHAT_MODEL,
                             messages=[
                                 {
                                     "role": "system",
@@ -123,17 +129,19 @@ if uploaded_file:
                         summary_question = response.choices[0].message.content.strip()
                         st.session_state[summary_key] = summary_question
                         st.session_state[answer_key] = ""  # 先に回答をクリア
+                        st.success("✅ 代表質問を生成しました。")
                     except Exception as e:
-                        st.error(f"代表質問生成中にエラーが発生しました: {e}")
+                        st.error(f"❌ 代表質問生成エラー:\n\n{e}")
+                        st.stop()
 
-            # ── GPT で模範回答生成 ──────────────────────────────────────
+            # ── GPT で模範回答生成 ────────────────────────────────
             if st.button(
                 f"💡 クラスタ {cluster_id} の模範回答を生成",
                 key=f"answer_button_{cluster_id}",
             ):
                 summary_question = st.session_state.get(summary_key)
                 if not summary_question:
-                    st.error("先に代表質問を生成してください。")
+                    st.warning("⚠️ 先に代表質問を生成してください。")
                     st.stop()
 
                 answer_prompt = (
@@ -144,7 +152,7 @@ if uploaded_file:
                 with st.spinner("GPT が模範回答を生成中..."):
                     try:
                         answer_response = client.chat.completions.create(
-                            model="gpt-4",
+                            model=CHAT_MODEL,
                             messages=[
                                 {
                                     "role": "system",
@@ -158,5 +166,7 @@ if uploaded_file:
                             0
                         ].message.content.strip()
                         st.session_state[answer_key] = model_answer
+                        st.success("✅ 模範回答を生成しました。")
                     except Exception as e:
-                        st.error(f"模範回答生成中にエラーが発生しました: {e}")
+                        st.error(f"❌ 模範回答生成エラー:\n\n{e}")
+                        st.stop()
