@@ -64,7 +64,15 @@ if uploaded_file:
         # セッションキー
         sum_key, ans_key = f"sum_{cid}", f"ans_{cid}"
 
-        with st.expander(f"▶️ クラスタ {cid}：{len(questions)} 件の質問", expanded=True):
+        # 代表質問または模範回答があればデフォルトで開く
+        initial_open = bool(
+            st.session_state.get(sum_key) or st.session_state.get(ans_key)
+        )
+
+        with st.expander(
+            f"▶️ クラスタ {cid}：{len(questions)} 件の質問",
+            expanded=initial_open,
+        ):
 
             # 1. 質問リスト
             st.markdown("\n".join([f"- {q}" for q in questions]))
@@ -90,7 +98,7 @@ if uploaded_file:
                         1 つに要約してください。
 
                         質問一覧:
-                    """
+                        """
                     )
                     + "\n".join([f"- {q}" for q in questions])
                     + "\n\n代表質問："
@@ -109,7 +117,7 @@ if uploaded_file:
                         temperature=0.5,
                     )
                 st.session_state[sum_key] = res.choices[0].message.content.strip()
-                st.session_state.pop(ans_key, None)  # 回答は無効化
+                st.session_state.pop(ans_key, None)  # 代表質問更新で回答を無効化
                 st.toast("✅ 代表質問を生成しました")
 
             # ── 模範回答生成 ─────────────────────────
@@ -124,7 +132,7 @@ if uploaded_file:
                         質問：{st.session_state[sum_key]}
 
                         回答：
-                    """
+                        """
                     )
                     with st.spinner(f"{answer_model} で模範回答生成中..."):
                         ares = client.chat.completions.create(
@@ -132,7 +140,7 @@ if uploaded_file:
                             messages=[
                                 {
                                     "role": "system",
-                                    "content": "あなたはわかりやすい回答を作る講義アシスタントです。",
+                                    "content": "あなたはわかりやすい回答を作る講義アシスタントです.",
                                 },
                                 {"role": "user", "content": a_prompt},
                             ],
