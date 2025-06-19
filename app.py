@@ -101,7 +101,6 @@ if uploaded_file:
                             ].message.content.strip()
                             st.session_state[summary_key] = summary_question
                             st.session_state[answer_key] = ""
-                            st.experimental_rerun()
 
                         except Exception as e:
                             st.error(f"代表質問生成中にエラーが発生しました: {e}")
