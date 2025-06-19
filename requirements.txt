@@ -1,5 +1,7 @@
-streamlit
-openai
-pandas
-scikit-learn
-numpy
+streamlit >= 1.34
+openai >= 1.3            # v1 系クライアント
+pandas >= 2.2
+scikit-learn >= 1.4
+numpy >= 1.26
+tiktoken >= 0.7          # 長文分割時のトークンカウントで便利
+python-dotenv >= 1.0     # ローカル開発で .env を使う場合
