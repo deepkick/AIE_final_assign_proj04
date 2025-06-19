@@ -20,7 +20,7 @@ CHAT_MODEL = "gpt-4"
 # ─────────────────────────────
 # UI：クラスタ数 & CSV
 # ─────────────────────────────
-num_clusters = st.slider("クラスタ数（KMeans）", 2, 20, 5)
+num_clusters = st.slider("クラスタ数（KMeans）", 2, 20, 10)
 uploaded_file = st.file_uploader(
     "📤 CSVファイルをアップロード（列: 質問, 回答）", type=["csv"]
 )
@@ -64,7 +64,19 @@ if uploaded_file:
             st.markdown("\n".join([f"- {q}" for q in questions]))
 
             # 2. 代表質問生成ボタン
-            if st.button("🧠 代表質問を生成", key=f"btn_sum_{cid}"):
+            gen_sum = st.button("🧠 代表質問を生成", key=f"btn_sum_{cid}")
+
+            # 3. 代表質問表示プレースホルダー（位置固定）
+            sum_ph = st.container()
+
+            # 4. 模範回答生成ボタン
+            gen_ans = st.button("💡 模範回答を生成", key=f"btn_ans_{cid}")
+
+            # 5. 模範回答表示プレースホルダー（位置固定）
+            ans_ph = st.container()
+
+            # ── ボタン処理（代表質問） ──────────────────
+            if gen_sum:
                 prompt = (
                     textwrap.dedent(
                         """\
@@ -77,6 +89,7 @@ if uploaded_file:
                     + "\n".join([f"- {q}" for q in questions])
                     + "\n\n代表質問："
                 )
+
                 with st.spinner("GPT が代表質問を要約中..."):
                     res = client.chat.completions.create(
                         model=CHAT_MODEL,
@@ -90,18 +103,11 @@ if uploaded_file:
                         temperature=0.5,
                     )
                 st.session_state[sum_key] = res.choices[0].message.content.strip()
-                st.session_state.pop(ans_key, None)  # 代表質問更新で回答は無効化
-                st.success("✅ 代表質問を生成しました。")
+                st.session_state.pop(ans_key, None)  # 回答は無効化
+                st.toast("✅ 代表質問を生成しました")
 
-            # 3. 代表質問を固定位置に表示
-            sum_placeholder = st.empty()
-            if st.session_state.get(sum_key):
-                sum_placeholder.markdown(
-                    f"**💬 代表質問：**\n\n{st.session_state[sum_key]}"
-                )
-
-            # 4. 模範回答生成ボタン
-            if st.button("💡 模範回答を生成", key=f"btn_ans_{cid}"):
+            # ── ボタン処理（模範回答） ──────────────────
+            if gen_ans:
                 if not st.session_state.get(sum_key):
                     st.warning("⚠️ 先に代表質問を生成してください。")
                 else:
@@ -127,11 +133,15 @@ if uploaded_file:
                             temperature=0.7,
                         )
                     st.session_state[ans_key] = ares.choices[0].message.content.strip()
-                    st.success("✅ 模範回答を生成しました。")
+                    st.toast("✅ 模範回答を生成しました")
 
-            # 5. 模範回答を固定位置に表示
-            ans_placeholder = st.empty()
+            # ── プレースホルダー描画（毎回） ──────────────────
+            if st.session_state.get(sum_key):
+                sum_ph.markdown(f"**💬 代表質問：**\n\n{st.session_state[sum_key]}")
+            else:
+                sum_ph.empty()
+
             if st.session_state.get(ans_key):
-                ans_placeholder.markdown(
-                    f"**📝 模範回答：**\n\n{st.session_state[ans_key]}"
-                )
+                ans_ph.markdown(f"**📝 模範回答：**\n\n{st.session_state[ans_key]}")
+            else:
+                ans_ph.empty()
