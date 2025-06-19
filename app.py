@@ -52,32 +52,23 @@ if uploaded_file:
             cluster_df = df[df["クラスタ"] == cluster_id]
             cluster_questions = cluster_df["質問"].tolist()
 
-            with st.expander(
-                f"▶️ クラスタ {cluster_id}：{len(cluster_questions)} 件の質問"
-            ):
+            with st.expander(f"▶️ クラスタ {cluster_id}：{len(cluster_questions)} 件の質問"):
                 summary_key = f"summary_question_{cluster_id}"
                 answer_key = f"model_answer_{cluster_id}"
 
-                if summary_key in st.session_state:
-                    st.markdown(
-                        f"""**💬 代表質問：**
+                if summary_key in st.session_state and st.session_state[summary_key]:
+                    st.markdown(f"**💬 代表質問：**
 
-{st.session_state[summary_key]}"""
-                    )
+{st.session_state[summary_key]}")
 
                 if answer_key in st.session_state and st.session_state[answer_key]:
-                    st.markdown(
-                        f"""**📝 模範回答：**
+                    st.markdown(f"**📝 模範回答：**
 
-{st.session_state[answer_key]}"""
-                    )
+{st.session_state[answer_key]}")
 
                 st.markdown("\n".join([f"- {q}" for q in cluster_questions]))
 
-                if st.button(
-                    f"🧠 クラスタ {cluster_id} の代表質問を生成",
-                    key=f"summary_button_{cluster_id}",
-                ):
+                if st.button(f"🧠 クラスタ {cluster_id} の代表質問を生成", key=f"summary_button_{cluster_id}"):
                     prompt = """以下の質問は講義中に受けた似た内容の質問です。これらを要約して、代表的な1つの質問にまとめてください。
 質問一覧："""
                     prompt += "\n".join([f"- {q}" for q in cluster_questions])
@@ -96,19 +87,15 @@ if uploaded_file:
                                 ],
                                 temperature=0.5,
                             )
-                            summary_question = response.choices[
-                                0
-                            ].message.content.strip()
+                            summary_question = response.choices[0].message.content.strip()
                             st.session_state[summary_key] = summary_question
                             st.session_state[answer_key] = ""
+                            
 
                         except Exception as e:
                             st.error(f"代表質問生成中にエラーが発生しました: {e}")
 
-                if st.button(
-                    f"💡 クラスタ {cluster_id} の模範回答を生成",
-                    key=f"answer_button_{cluster_id}",
-                ):
+                if st.button(f"💡 クラスタ {cluster_id} の模範回答を生成", key=f"answer_button_{cluster_id}"):
                     summary_question = st.session_state.get(summary_key)
                     if not summary_question:
                         st.error("先に代表質問を生成してください。")
@@ -131,10 +118,9 @@ if uploaded_file:
                                 ],
                                 temperature=0.7,
                             )
-                            model_answer = answer_response.choices[
-                                0
-                            ].message.content.strip()
+                            model_answer = answer_response.choices[0].message.content.strip()
                             st.session_state[answer_key] = model_answer
+                            
 
                         except Exception as e:
                             st.error(f"模範回答生成中にエラーが発生しました: {e}")
