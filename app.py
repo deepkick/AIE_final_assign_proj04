@@ -130,6 +130,7 @@ if uploaded_file:
                         st.session_state[summary_key] = summary_question
                         st.session_state[answer_key] = ""  # 先に回答をクリア
                         st.success("✅ 代表質問を生成しました。")
+                        st.rerun()  # ← 追加：即座に再描画して代表質問を表示
                     except Exception as e:
                         st.error(f"❌ 代表質問生成エラー:\n\n{e}")
                         st.stop()
