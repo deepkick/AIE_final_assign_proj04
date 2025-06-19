@@ -21,12 +21,12 @@ st.title("📚 講義の質疑応答まとめアプリ : AIE Proj 04")
 openai_api_key = st.secrets["openai_api_key"]
 client = OpenAI(api_key=openai_api_key)
 
-CHAT_MODEL = "gpt-4"  # ← 固定で使用
+CHAT_MODEL = "gpt-4"  # 固定
 
 # ──────────────────────────────────────────────
 # UI：クラスタ数・ファイルアップロード
 # ──────────────────────────────────────────────
-num_clusters = st.slider("クラスタ数（KMeans）", min_value=2, max_value=20, value=5)
+num_clusters = st.slider("クラスタ数（KMeans）", 2, 20, 5)
 
 uploaded_file = st.file_uploader(
     "📤 CSVファイルをアップロード（列: 質問, 回答）", type=["csv"]
@@ -75,11 +75,18 @@ if uploaded_file:
         cluster_df = df[df["クラスタ"] == cluster_id]
         cluster_questions = cluster_df["質問"].tolist()
 
-        with st.expander(f"▶️ クラスタ {cluster_id}：{len(cluster_questions)} 件の質問"):
-            summary_key = f"summary_question_{cluster_id}"
-            answer_key = f"model_answer_{cluster_id}"
+        summary_key = f"summary_question_{cluster_id}"
+        answer_key = f"model_answer_{cluster_id}"
 
-            # ── 既存の代表質問・模範回答を表示 ───────────────────
+        expanded = bool(
+            st.session_state.get(summary_key) or st.session_state.get(answer_key)
+        )
+
+        with st.expander(
+            f"▶️ クラスタ {cluster_id}：{len(cluster_questions)} 件の質問",
+            expanded=expanded,
+        ):
+            # 既存表示
             if st.session_state.get(summary_key):
                 st.markdown(
                     f"""**💬 代表質問：**
@@ -94,24 +101,26 @@ if uploaded_file:
 {st.session_state[answer_key]}"""
                 )
 
-            # 質問リストを列挙
+            # 質問一覧
             st.markdown("\n".join([f"- {q}" for q in cluster_questions]))
 
-            # ── GPT で代表質問生成 ────────────────────────────────
+            # ── 代表質問生成 ──────────────────────────────
             if st.button(
                 f"🧠 クラスタ {cluster_id} の代表質問を生成",
                 key=f"summary_button_{cluster_id}",
             ):
-                prompt = textwrap.dedent(
-                    """\
+                prompt = (
+                    textwrap.dedent(
+                        """\
                     以下の質問は講義中に受けた似た内容の質問です。
                     これらを要約して、代表的な1つの質問にまとめてください。
 
                     質問一覧：
                     """
+                    )
+                    + "\n".join([f"- {q}" for q in cluster_questions])
+                    + "\n\n代表質問："
                 )
-                prompt += "\n".join([f"- {q}" for q in cluster_questions])
-                prompt += "\n\n代表質問："
 
                 with st.spinner("GPT が代表質問を要約中..."):
                     try:
@@ -127,15 +136,22 @@ if uploaded_file:
                             temperature=0.5,
                         )
                         summary_question = response.choices[0].message.content.strip()
+
                         st.session_state[summary_key] = summary_question
-                        st.session_state[answer_key] = ""  # 先に回答をクリア
+                        st.session_state[answer_key] = ""  # 回答リセット
                         st.success("✅ 代表質問を生成しました。")
-                        st.rerun()  # ← 追加：即座に再描画して代表質問を表示
+
+                        # 即時表示
+                        st.markdown(
+                            f"""**💬 代表質問：**
+
+{summary_question}"""
+                        )
                     except Exception as e:
                         st.error(f"❌ 代表質問生成エラー:\n\n{e}")
                         st.stop()
 
-            # ── GPT で模範回答生成 ────────────────────────────────
+            # ── 模範回答生成 ──────────────────────────────
             if st.button(
                 f"💡 クラスタ {cluster_id} の模範回答を生成",
                 key=f"answer_button_{cluster_id}",
@@ -166,8 +182,16 @@ if uploaded_file:
                         model_answer = answer_response.choices[
                             0
                         ].message.content.strip()
+
                         st.session_state[answer_key] = model_answer
                         st.success("✅ 模範回答を生成しました。")
+
+                        # 即時表示
+                        st.markdown(
+                            f"""**📝 模範回答：**
+
+{model_answer}"""
+                        )
                     except Exception as e:
                         st.error(f"❌ 模範回答生成エラー:\n\n{e}")
                         st.stop()
